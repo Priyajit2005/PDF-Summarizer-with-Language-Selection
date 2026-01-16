@@ -1,11 +1,8 @@
 import streamlit as st
-from dotenv import load_dotenv
-load_dotenv()
-
 import os
 import tempfile
 
-from langchain.chat_models import ChatOpenAI
+from langchain_community.chat_models import ChatOpenAI
 from langchain.chains.summarize import load_summarize_chain
 from langchain_text_splitters import RecursiveCharacterTextSplitter
 from langchain_community.document_loaders import PyPDFDirectoryLoader
@@ -36,8 +33,12 @@ language = st.selectbox(
     ]
 )
 
-# ---------------- NVIDIA API ----------------
-os.environ["NVIDIA_API_KEY"] = os.getenv("NVIDIA_API_KEY2")
+# ---------------- NVIDIA API (STREAMLIT CLOUD SAFE) ----------------
+if "NVIDIA_API_KEY" not in st.secrets:
+    st.error("❌ NVIDIA API key not found. Please add it in Streamlit Secrets.")
+    st.stop()
+
+os.environ["NVIDIA_API_KEY"] = st.secrets["NVIDIA_API_KEY"]
 
 # ---------------- File Upload ----------------
 def upload_files():
@@ -110,19 +111,10 @@ Preserve important details.
 """
     )
 
-    combine_prompt = PromptTemplate(
-        input_variables=["text", "language"],
-        template="""
-Provide a final concise summary in {language}.
-
-{text}
-"""
-    )
-
-    # ---------------- Load Summarization Chain (STUFF) ----------------
+    # ---------------- Load Summarization Chain ----------------
     chain = load_summarize_chain(
         llm=llm,
-        chain_type="stuff",  # ✅ Use 'stuff' to avoid map_reduce token errors
+        chain_type="stuff",
         prompt=map_prompt
     )
 
