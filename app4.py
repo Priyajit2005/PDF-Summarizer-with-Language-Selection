@@ -2,12 +2,11 @@ import streamlit as st
 import os
 import tempfile
 
-from langchain_community.chat_models import ChatOpenAI
+from langchain_openai import ChatOpenAI, OpenAIEmbeddings
 from langchain.chains.summarize import load_summarize_chain
 from langchain_text_splitters import RecursiveCharacterTextSplitter
 from langchain_community.document_loaders import PyPDFDirectoryLoader
 from langchain_community.vectorstores import FAISS
-from langchain_nvidia_ai_endpoints import NVIDIAEmbeddings
 from langchain_core.prompts import PromptTemplate
 
 # ---------------- Page Config ----------------
@@ -33,12 +32,9 @@ language = st.selectbox(
     ]
 )
 
-# ---------------- NVIDIA API (STREAMLIT CLOUD SAFE) ----------------
-if "NVIDIA_API_KEY" not in st.secrets:
-    st.error("❌ NVIDIA API key not found. Please add it in Streamlit Secrets.")
-    st.stop()
-
-os.environ["NVIDIA_API_KEY"] = st.secrets["NVIDIA_API_KEY"]
+# ---------------- OpenAI API Key ----------------
+if not openai_api_key:
+    st.warning("Please enter your OpenAI API key in the sidebar.")
 
 # ---------------- File Upload ----------------
 def upload_files():
@@ -63,11 +59,19 @@ upload_files()
 
 # ---------------- Vector Embedding ----------------
 def vector_embedding():
+    if not openai_api_key:
+        st.error("❌ Please enter your OpenAI API key")
+        return
+
     if "raw_documents" not in st.session_state:
         st.error("❌ Please upload PDFs first")
         return
 
-    embeddings = NVIDIAEmbeddings()
+    os.environ["OPENAI_API_KEY"] = openai_api_key
+
+    embeddings = OpenAIEmbeddings(
+        model="text-embedding-3-small"
+    )
 
     splitter = RecursiveCharacterTextSplitter(
         chunk_size=700,
@@ -82,7 +86,8 @@ def vector_embedding():
 # ---------------- Buttons ----------------
 if st.button("📌 Create Vector Database"):
     vector_embedding()
-    st.success("✅ Vector database created successfully")
+    if "vectors" in st.session_state:
+        st.success("✅ Vector database created successfully")
 
 if st.button("📝 Summarize PDF"):
     if not openai_api_key:
@@ -93,14 +98,16 @@ if st.button("📝 Summarize PDF"):
         st.error("❌ Please create vector DB first")
         st.stop()
 
+    os.environ["OPENAI_API_KEY"] = openai_api_key
+
     # ---------------- LLM ----------------
     llm = ChatOpenAI(
-        api_key=openai_api_key,
         model="gpt-4o-mini",
-        temperature=0.3
+        temperature=0.3,
+        api_key=openai_api_key
     )
 
-    # ---------------- Prompts ----------------
+    # ---------------- Prompt ----------------
     map_prompt = PromptTemplate(
         input_variables=["text", "language"],
         template="""
@@ -111,7 +118,7 @@ Preserve important details.
 """
     )
 
-    # ---------------- Load Summarization Chain ----------------
+    # ---------------- Summarization Chain ----------------
     chain = load_summarize_chain(
         llm=llm,
         chain_type="stuff",
